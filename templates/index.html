@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENTINEL-X | E-Commerce Security Command</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #020408; --bg2: #060c14; --bg3: #0a1520;
+            --cyan: #00e5ff; --cyan2: #00b8d4;
+            --red: #ff2d55; --red2: #d4003e;
+            --green: #00ff88; --orange: #ff9f1c; --purple: #b57bee;
+            --text: #cdd6f4; --muted: #3a4a60;
+            --border: rgba(0,229,255,0.08); --border2: rgba(0,229,255,0.18);
+            --font-display: 'Orbitron', monospace;
+            --font-ui: 'Rajdhani', sans-serif;
+            --font-mono: 'Share Tech Mono', monospace;
+        }
+
+        /* ── CURSOR ── */
+        * { cursor: none !important; }
+        #cursor-dot {
+            position: fixed; top: 0; left: 0; width: 6px; height: 6px;
+            background: var(--cyan); border-radius: 50%; pointer-events: none;
+            z-index: 9999; transform: translate(-50%,-50%);
+            box-shadow: 0 0 8px var(--cyan), 0 0 20px rgba(0,229,255,0.4);
+            transition: background 0.2s;
+        }
+        #cursor-ring {
+            position: fixed; top: 0; left: 0; width: 32px; height: 32px;
+            border: 1px solid rgba(0,229,255,0.5); border-radius: 50%;
+            pointer-events: none; z-index: 9998; transform: translate(-50%,-50%);
+            transition: width 0.2s, height 0.2s, border-color 0.2s, background 0.2s;
+        }
+        #cursor-crosshair {
+            position: fixed; top: 0; left: 0; width: 1px; height: 24px;
+            background: rgba(0,229,255,0.3); pointer-events: none; z-index: 9997;
+            transform: translate(-50%,-50%);
+        }
+        #cursor-crosshair::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%,-50%) rotate(90deg);
+            width: 1px; height: 24px; background: rgba(0,229,255,0.3);
+        }
+        body.cursor-danger #cursor-dot  { background: var(--red); box-shadow: 0 0 8px var(--red), 0 0 20px rgba(255,45,85,0.4); }
+        body.cursor-danger #cursor-ring { border-color: var(--red); width: 44px; height: 44px; }
+        body.cursor-hover  #cursor-ring { width: 48px; height: 48px; background: rgba(0,229,255,0.05); }
+        body.cursor-click  #cursor-dot  { transform: translate(-50%,-50%) scale(2.5); }
+
+        /* ── BG LAYERS ── */
+        #bg-canvas  { position: fixed; inset: 0; z-index: 0; opacity: 0.18; pointer-events: none; }
+        #scanlines  { position: fixed; inset: 0; pointer-events: none; z-index: 100;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 4px);
+            animation: scanMove 8s linear infinite; }
+        #vignette   { position: fixed; inset: 0; pointer-events: none; z-index: 99;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%); }
+        #grid-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 1;
+            background-image: linear-gradient(rgba(0,229,255,0.025) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(0,229,255,0.025) 1px, transparent 1px);
+            background-size: 60px 60px; }
+
+        @keyframes scanMove { 0%{background-position:0 0} 100%{background-position:0 100vh} }
+
+        body { background: var(--bg); color: var(--text); font-family: var(--font-ui); min-height: 100vh; overflow-x: hidden; }
+
+        /* ── APP ── */
+        #app { position: relative; z-index: 10; max-width: 1380px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+
+        /* ── HEADER ── */
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1rem 2rem; background: rgba(6,12,20,0.95);
+            border: 1px solid var(--border2); border-radius: 2px;
+            margin-bottom: 1.5rem; position: relative; overflow: hidden;
+            backdrop-filter: blur(12px);
+            animation: fadeSlideIn 0.5s ease both 0.05s;
+        }
+        header::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+            animation: scanH 3s ease-in-out infinite;
+        }
+        @keyframes scanH { 0%,100%{opacity:0.3;transform:scaleX(0.3)} 50%{opacity:1;transform:scaleX(1)} }
+
+        .header-left { display: flex; align-items: center; gap: 1.5rem; }
+        .logo-mark {
+            width: 44px; height: 44px; border: 1.5px solid var(--cyan); border-radius: 2px;
+            display: flex; align-items: center; justify-content: center; position: relative;
+            animation: logoPulse 4s ease-in-out infinite;
+        }
+        .logo-mark::before { content:''; position:absolute; inset:3px; border:1px solid rgba(0,229,255,0.3); border-radius:1px; }
+        .logo-mark svg { width:20px; height:20px; }
+        @keyframes logoPulse { 0%,100%{box-shadow:0 0 0 0 rgba(0,229,255,0.3)} 50%{box-shadow:0 0 0 8px rgba(0,229,255,0)} }
+
+        .header-title {
+            font-family: var(--font-display); color: var(--cyan); letter-spacing: 6px;
+            font-size: 22px; font-weight: 700; text-shadow: 0 0 30px rgba(0,229,255,0.4);
+            position: relative;
+        }
+        .header-title::before, .header-title::after {
+            content: attr(data-text); position: absolute; inset: 0;
+            font-family: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit;
+        }
+        .header-title::before { color:var(--red);  animation:glitch1 4s infinite; clip-path:polygon(0 20%,100% 20%,100% 40%,0 40%); }
+        .header-title::after  { color:var(--cyan); animation:glitch2 4s infinite; clip-path:polygon(0 60%,100% 60%,100% 80%,0 80%); }
+        @keyframes glitch1 { 0%,90%,100%{transform:translateX(0);opacity:0} 91%{transform:translateX(-2px);opacity:0.6} 93%{transform:translateX(2px);opacity:0.3} 95%{transform:translateX(0);opacity:0} }
+        @keyframes glitch2 { 0%,92%,100%{transform:translateX(0);opacity:0} 93%{transform:translateX(2px);opacity:0.5} 96%{transform:translateX(-2px);opacity:0.2} 98%{transform:translateX(0);opacity:0} }
+
+        .header-sub   { font-family:var(--font-mono); font-size:9px; color:var(--muted); letter-spacing:2px; margin-top:3px; }
+        .header-right { display:flex; align-items:center; gap:2rem; }
+
+        .status-pill { display:flex; align-items:center; gap:8px; padding:6px 14px; border:1px solid rgba(0,255,136,0.2); border-radius:2px; background:rgba(0,255,136,0.05); }
+        .status-dot  { width:7px; height:7px; background:var(--green); border-radius:50%; animation:dotBlink 2s ease-in-out infinite; box-shadow:0 0 6px var(--green); }
+        @keyframes dotBlink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .status-text { font-family:var(--font-mono); font-size:10px; color:var(--green); letter-spacing:2px; }
+
+        #clock { font-family:var(--font-mono); color:var(--cyan); font-size:15px; letter-spacing:2px; min-width:90px; text-align:right; }
+
+        /* ── EMAIL ALERT INDICATOR ── */
+        .email-pill {
+            display:flex; align-items:center; gap:8px; padding:6px 14px;
+            border:1px solid rgba(0,229,255,0.15); border-radius:2px;
+            background:rgba(0,229,255,0.04); font-family:var(--font-mono);
+            font-size:10px; color:var(--cyan); letter-spacing:1px;
+        }
+        .email-dot { width:6px; height:6px; background:var(--cyan); border-radius:50%; box-shadow:0 0 6px var(--cyan); }
+
+        /* ── TICKER ── */
+        .alert-banner {
+            background:rgba(255,45,85,0.06); border:1px solid rgba(255,45,85,0.2);
+            border-radius:2px; padding:0.6rem 1.5rem; display:flex; align-items:center;
+            gap:12px; margin-bottom:1.5rem; overflow:hidden; position:relative;
+            animation: fadeSlideIn 0.5s ease both 0.15s;
+        }
+        .alert-banner::before {
+            content:''; position:absolute; top:0; left:-100%; width:100%; height:100%;
+            background:linear-gradient(90deg,transparent,rgba(255,45,85,0.06),transparent);
+            animation:alertSweep 3s ease-in-out infinite;
+        }
+        @keyframes alertSweep { 0%{left:-100%} 100%{left:100%} }
+        .alert-icon  { font-family:var(--font-mono); color:var(--red); font-size:10px; letter-spacing:1px; animation:alertFlash 1.5s step-start infinite; }
+        @keyframes alertFlash { 0%,100%{opacity:1} 50%{opacity:0} }
+        .ticker-wrap  { flex:1; overflow:hidden; }
+        .ticker-inner { font-family:var(--font-mono); font-size:11px; color:rgba(255,45,85,0.7); white-space:nowrap; animation:ticker 32s linear infinite; letter-spacing:1px; }
+        @keyframes ticker { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+
+        /* ── STATS ROW ── */
+        .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
+        .stat-card {
+            background:rgba(6,12,20,0.95); border:1px solid var(--border);
+            padding:1.5rem; border-radius:2px; position:relative; overflow:hidden;
+            transition:border-color 0.3s, transform 0.2s;
+        }
+        .stat-card:hover { border-color:var(--border2); transform:translateY(-2px); }
+        .stat-card::before { content:''; position:absolute; bottom:0; left:0; width:100%; height:2px; }
+        .s-green::before  { background:var(--green); }
+        .s-red::before    { background:var(--red); }
+        .s-orange::before { background:var(--orange); }
+        .s-cyan::before   { background:var(--cyan); }
+        .stat-card-inner { position:relative; z-index:2; }
+        .stat-ghost { position:absolute; right:16px; top:50%; transform:translateY(-50%); font-family:var(--font-display); font-size:70px; font-weight:900; opacity:0.04; color:white; z-index:1; user-select:none; }
+        .stat-label { font-family:var(--font-mono); font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:3px; display:flex; align-items:center; gap:6px; }
+        .stat-label-dot { width:4px; height:4px; border-radius:50%; }
+        .s-green .stat-label-dot  { background:var(--green); }
+        .s-red   .stat-label-dot  { background:var(--red); }
+        .s-orange .stat-label-dot { background:var(--orange); }
+        .s-cyan  .stat-label-dot  { background:var(--cyan); }
+        .stat-val { font-family:var(--font-display); font-size:38px; margin-top:10px; font-weight:700; line-height:1; transition:all 0.3s; }
+        .s-green .stat-val  { color:var(--green);  text-shadow:0 0 20px rgba(0,255,136,0.3); }
+        .s-red   .stat-val  { color:var(--red);    text-shadow:0 0 20px rgba(255,45,85,0.3); }
+        .s-orange .stat-val { color:var(--orange); text-shadow:0 0 20px rgba(255,159,28,0.3); }
+        .s-cyan  .stat-val  { color:var(--cyan);   text-shadow:0 0 20px rgba(0,229,255,0.3); }
+        .stat-bar      { margin-top:12px; height:2px; background:rgba(255,255,255,0.04); border-radius:1px; overflow:hidden; }
+        .stat-bar-fill { height:100%; border-radius:1px; width:0%; transition:width 1s cubic-bezier(0.23,1,0.32,1); }
+        .s-green .stat-bar-fill  { background:var(--green); }
+        .s-red   .stat-bar-fill  { background:var(--red); }
+        .s-orange .stat-bar-fill { background:var(--orange); }
+        .s-cyan  .stat-bar-fill  { background:var(--cyan); }
+
+        /* ── STAT CARDS STAGGER ── */
+        .stat-card:nth-child(1){ animation:fadeSlideIn 0.5s ease both 0.20s; }
+        .stat-card:nth-child(2){ animation:fadeSlideIn 0.5s ease both 0.25s; }
+        .stat-card:nth-child(3){ animation:fadeSlideIn 0.5s ease both 0.30s; }
+        .stat-card:nth-child(4){ animation:fadeSlideIn 0.5s ease both 0.35s; }
+
+        /* ── PANELS ── */
+        .main-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:1.5rem; margin-bottom:1.5rem; }
+        .panel {
+            background:rgba(6,12,20,0.95); border:1px solid var(--border);
+            border-radius:2px; padding:1.5rem; position:relative; overflow:hidden;
+            transition:border-color 0.3s; animation:fadeSlideIn 0.5s ease both 0.45s;
+        }
+        .panel:hover { border-color:var(--border2); }
+        .panel-corner { position:absolute; width:12px; height:12px; }
+        .panel-corner.tl { top:-1px;    left:-1px;  border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+        .panel-corner.tr { top:-1px;    right:-1px; border-top:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+        .panel-corner.bl { bottom:-1px; left:-1px;  border-bottom:2px solid var(--cyan); border-left:2px solid var(--cyan); }
+        .panel-corner.br { bottom:-1px; right:-1px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); }
+        .panel-title {
+            font-family:var(--font-display); font-size:10px; color:var(--cyan);
+            margin-bottom:1rem; border-bottom:1px solid var(--border); padding-bottom:0.75rem;
+            letter-spacing:4px; display:flex; align-items:center; justify-content:space-between;
+        }
+        .panel-title-left { display:flex; align-items:center; gap:8px; }
+        .panel-title-left::before { content:''; width:3px; height:3px; background:var(--cyan); border-radius:50%; box-shadow:0 0 6px var(--cyan); }
+
+        /* ── THREAT ITEMS ── */
+        .threat-item {
+            display:flex; justify-content:space-between; align-items:center;
+            padding:11px 14px; margin-bottom:7px; border-left:2px solid var(--cyan);
+            background:rgba(0,229,255,0.02); position:relative; overflow:hidden;
+            transition:background 0.2s, transform 0.15s;
+            animation:threatIn 0.3s ease both;
+        }
+        @keyframes threatIn { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
+        .threat-item:hover { background:rgba(0,229,255,0.05); transform:translateX(2px); }
+        .threat-item.critical { border-left-color:var(--red); background:rgba(255,45,85,0.03); animation:threatIn 0.3s ease both, threatPulse 3s 0.3s ease-in-out infinite; }
+        @keyframes threatPulse { 0%,100%{box-shadow:inset 0 0 0 rgba(255,45,85,0)} 50%{box-shadow:inset -3px 0 15px rgba(255,45,85,0.08)} }
+        .threat-ip   { font-family:var(--font-mono); font-size:13px; color:var(--text); }
+        .threat-type { font-size:10px; color:var(--muted); margin-top:3px; font-family:var(--font-mono); letter-spacing:1px; }
+        .threat-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+
+        /* ── BADGES ── */
+        .badge { font-family:var(--font-mono); font-size:9px; padding:3px 8px; border-radius:1px; font-weight:bold; letter-spacing:2px; }
+        .CRITICAL { background:rgba(255,45,85,0.12); color:var(--red);    border:1px solid rgba(255,45,85,0.2);  animation:badgePulse 2s ease-in-out infinite; }
+        .HIGH     { background:rgba(255,159,28,0.1);  color:var(--orange); border:1px solid rgba(255,159,28,0.2); }
+        .MEDIUM   { background:rgba(255,230,109,0.08);color:#ffe66d;       border:1px solid rgba(255,230,109,0.15); }
+        .LOW      { background:rgba(0,229,255,0.06);  color:var(--cyan);   border:1px solid rgba(0,229,255,0.15); }
+        .BANNED   { background:rgba(0,255,136,0.06);  color:var(--green);  border:1px solid rgba(0,255,136,0.15); }
+        @keyframes badgePulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,45,85,0.3)} 50%{box-shadow:0 0 0 3px rgba(255,45,85,0)} }
+
+        /* ── BUTTONS ── */
+        .btn-block   { background:transparent; border:1px solid rgba(255,45,85,0.4); color:var(--red); font-family:var(--font-mono); font-size:9px; padding:4px 10px; letter-spacing:2px; transition:all 0.2s; }
+        .btn-block:hover { background:var(--red); color:white; box-shadow:0 0 12px rgba(255,45,85,0.3); transform:scale(1.05); }
+        .btn-unblock { background:transparent; border:1px solid rgba(0,255,136,0.4); color:var(--green); font-family:var(--font-mono); font-size:9px; padding:4px 10px; letter-spacing:2px; transition:all 0.2s; }
+        .btn-unblock:hover { background:var(--green); color:#000; }
+
+        /* ── LOG TERMINAL ── */
+        .log-terminal { background:#000; height:240px; overflow-y:auto; padding:12px; font-family:var(--font-mono); font-size:11px; border:1px solid #0a1520; border-radius:2px; scrollbar-width:thin; scrollbar-color:var(--muted) transparent; }
+        .log-line { margin-bottom:5px; color:#2a3a4a; line-height:1.4; position:relative; padding-left:12px; }
+        .log-line::before { content:'›'; position:absolute; left:0; color:#1a2a3a; }
+        .log-line.danger { color:var(--red); }
+        .log-line.danger::before { color:var(--red); }
+        .log-line.block  { color:var(--green); }
+        .log-line.block::before  { color:var(--green); }
+        .log-line.warn   { color:var(--orange); }
+        .log-line.warn::before   { color:var(--orange); }
+        .log-line.info   { color:var(--cyan); }
+        .log-line.info::before   { color:var(--cyan); }
+        .log-line.email  { color:var(--purple); }
+        .log-line.email::before  { color:var(--purple); }
+
+        /* ── BOTTOM ROW ── */
+        .bottom-row { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem; }
+
+        /* ── CHART ── */
+        .chart-bars { display:flex; align-items:flex-end; gap:3px; height:90px; }
+        .chart-bar { flex:1; border-radius:1px 1px 0 0; min-height:4px; transition:height 0.8s cubic-bezier(0.23,1,0.32,1); background:linear-gradient(to top,var(--cyan),rgba(0,229,255,0.3)); }
+        .chart-bar:hover { background:linear-gradient(to top,white,var(--cyan)); }
+        .chart-bar.danger-bar { background:linear-gradient(to top,var(--red),rgba(255,45,85,0.3)); }
+        .chart-labels { display:flex; justify-content:space-between; margin-top:6px; }
+        .chart-labels span { font-family:var(--font-mono); font-size:9px; color:var(--muted); }
+
+        /* ── ACTIVE DEFENSE ── */
+        .honeypot-box { background:rgba(255,230,109,0.04); border:1px solid rgba(255,230,109,0.15); border-radius:2px; padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+        .hp-lamp  { width:8px; height:8px; border-radius:50%; background:#ffe66d; flex-shrink:0; animation:hpBlink 1s step-end infinite; box-shadow:0 0 6px #ffe66d; }
+        @keyframes hpBlink { 0%,100%{opacity:1} 50%{opacity:0} }
+        .hp-label { font-family:var(--font-mono); font-size:11px; color:#ffe66d; flex:1; }
+        .hp-count { font-family:var(--font-display); font-size:18px; font-weight:700; color:#ffe66d; }
+
+        /* ── EMAIL STATUS BOX ── */
+        .email-status-box {
+            background:rgba(181,123,238,0.06); border:1px solid rgba(181,123,238,0.2);
+            border-radius:2px; padding:10px 12px; display:flex; align-items:center;
+            gap:10px; margin-bottom:10px;
+        }
+        .email-lamp { width:8px; height:8px; border-radius:50%; background:var(--purple); flex-shrink:0; box-shadow:0 0 6px var(--purple); animation:dotBlink 3s ease-in-out infinite; }
+        .email-label { font-family:var(--font-mono); font-size:11px; color:var(--purple); flex:1; }
+        .email-sent-count { font-family:var(--font-display); font-size:18px; font-weight:700; color:var(--purple); }
+
+        /* ── BANNED LIST ── */
+        .banned-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.03); font-family:var(--font-mono); font-size:11px; }
+        .banned-row:last-child { border-bottom:none; }
+        .banned-x  { color:var(--red); font-size:10px; }
+        .banned-ip { color:#64748b; flex:1; }
+        .banned-tag { font-size:9px; padding:1px 6px; background:rgba(255,45,85,0.1); color:var(--red); border:1px solid rgba(255,45,85,0.2); border-radius:2px; }
+
+        /* ── STRESS BUTTON ── */
+        .stress-btn {
+            width:100%; padding:1.1rem 2rem; background:rgba(255,45,85,0.06);
+            border:1px solid rgba(255,45,85,0.25); color:var(--red);
+            font-family:var(--font-display); font-size:13px; letter-spacing:4px;
+            position:relative; overflow:hidden; transition:all 0.3s; text-transform:uppercase;
+        }
+        .stress-btn::before { content:''; position:absolute; top:0; left:-100%; width:100%; height:100%; background:linear-gradient(90deg,transparent,rgba(255,45,85,0.08),transparent); transition:left 0.4s; }
+        .stress-btn:hover { background:rgba(255,45,85,0.15); border-color:var(--red); box-shadow:0 0 30px rgba(255,45,85,0.15); }
+        .stress-btn:hover::before { left:100%; }
+        .stress-btn.running { animation:stressAnim 0.5s ease-in-out infinite alternate; }
+        @keyframes stressAnim { 0%{box-shadow:0 0 10px rgba(255,45,85,0.2)} 100%{box-shadow:0 0 40px rgba(255,45,85,0.5)} }
+
+        /* ── TOAST NOTIFICATION ── */
+        #toast {
+            position:fixed; bottom:2rem; right:2rem; z-index:9999;
+            background:rgba(6,12,20,0.98); border:1px solid var(--purple);
+            border-radius:2px; padding:14px 20px; font-family:var(--font-mono);
+            font-size:12px; color:var(--purple); display:none; max-width:360px;
+            box-shadow:0 0 30px rgba(181,123,238,0.2);
+            animation:toastIn 0.3s ease;
+        }
+        @keyframes toastIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        .toast-title { font-size:10px; letter-spacing:3px; margin-bottom:6px; color:var(--purple); }
+        .toast-body  { color:var(--text); font-size:11px; line-height:1.6; }
+
+        /* ── ENTRY ANIMATIONS ── */
+        @keyframes fadeSlideIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background:var(--bg); }
+        ::-webkit-scrollbar-thumb { background:var(--muted); border-radius:3px; }
+
+        @media(max-width:900px){
+            .stats-row { grid-template-columns:repeat(2,1fr); }
+            .main-grid { grid-template-columns:1fr; }
+            .bottom-row { grid-template-columns:1fr; }
+            .header-right { gap:1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- CURSOR -->
+<div id="cursor-dot"></div>
+<div id="cursor-ring"></div>
+<div id="cursor-crosshair"></div>
+
+<!-- BG -->
+<canvas id="bg-canvas"></canvas>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="grid-overlay"></div>
+
+<!-- EMAIL TOAST -->
+<div id="toast">
+    <div class="toast-title">📧 ALERT EMAIL SENT</div>
+    <div class="toast-body" id="toast-body">Critical threat detected. Security team notified.</div>
+</div>
+
+<div id="app">
+
+    <!-- HEADER -->
+    <header>
+        <div class="header-left">
+            <div class="logo-mark">
+                <svg viewBox="0 0 20 20" fill="none">
+                    <path d="M10 2L3 6v5c0 4.4 3 8.5 7 9.4 4-1 7-5 7-9.4V6L10 2z" stroke="#00e5ff" stroke-width="1.2"/>
+                    <path d="M7 10l2 2 4-4" stroke="#00e5ff" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <div>
+                <div class="header-title" data-text="SENTINEL-X">SENTINEL-X</div>
+                <div class="header-sub">v3.0.0 · E-COMMERCE THREAT MONITORING · EMAIL ALERTS ACTIVE</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="email-pill">
+                <div class="email-dot"></div>
+                <span>ALERTS: ACTIVE</span>
+            </div>
+            <div class="status-pill">
+                <div class="status-dot"></div>
+                <span class="status-text">SYSTEM ONLINE</span>
+            </div>
+            <div>
+                <div id="clock">--:--:--</div>
+                <div style="font-family:var(--font-mono);font-size:9px;color:var(--muted);text-align:right;margin-top:2px;letter-spacing:2px;">UTC+5:30</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- TICKER -->
+    <div class="alert-banner">
+        <div class="alert-icon">⚠ ALERT</div>
+        <div class="ticker-wrap">
+            <div class="ticker-inner">
+                E-COMMERCE MONITOR ACTIVE · Failed login tracking enabled · Bot detection running · Suspicious request scanner online · Email alerts configured · SQL Injection signatures loaded · XSS pattern matching active · Directory traversal detection enabled · Honeypot trap armed at /honeypot ·
+            </div>
+        </div>
+    </div>
+
+    <!-- STAT CARDS -->
+    <div class="stats-row">
+        <div class="stat-card s-green">
+            <div class="stat-ghost">✓</div>
+            <div class="stat-card-inner">
+                <div class="stat-label"><span class="stat-label-dot"></span>Safe Logins</div>
+                <div class="stat-val" id="stat-success">0</div>
+                <div class="stat-bar"><div class="stat-bar-fill" id="bar-success"></div></div>
+            </div>
+        </div>
+        <div class="stat-card s-red">
+            <div class="stat-ghost">!</div>
+            <div class="stat-card-inner">
+                <div class="stat-label"><span class="stat-label-dot"></span>Total Threats</div>
+                <div class="stat-val" id="stat-fails">0</div>
+                <div class="stat-bar"><div class="stat-bar-fill" id="bar-fails"></div></div>
+            </div>
+        </div>
+        <div class="stat-card s-orange">
+            <div class="stat-ghost">⊘</div>
+            <div class="stat-card-inner">
+                <div class="stat-label"><span class="stat-label-dot"></span>Banned IPs</div>
+                <div class="stat-val" id="stat-banned">0</div>
+                <div class="stat-bar"><div class="stat-bar-fill" id="bar-banned"></div></div>
+            </div>
+        </div>
+        <div class="stat-card s-cyan">
+            <div class="stat-ghost">%</div>
+            <div class="stat-card-inner">
+                <div class="stat-label"><span class="stat-label-dot"></span>Health Score</div>
+                <div class="stat-val" id="stat-score">100</div>
+                <div class="stat-bar"><div class="stat-bar-fill" id="bar-score" style="width:100%"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+
+        <!-- Threat Intelligence -->
+        <div class="panel">
+            <div class="panel-corner tl"></div><div class="panel-corner tr"></div>
+            <div class="panel-corner bl"></div><div class="panel-corner br"></div>
+            <div class="panel-title">
+                <span class="panel-title-left">LIVE THREAT INTELLIGENCE</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);" id="threat-count">0 ACTIVE</span>
+            </div>
+            <div id="threat-list">
+                <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:center;padding:2rem;">
+                    AWAITING THREAT DATA...
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal Log -->
+        <div class="panel">
+            <div class="panel-corner tl"></div><div class="panel-corner tr"></div>
+            <div class="panel-corner bl"></div><div class="panel-corner br"></div>
+            <div class="panel-title">
+                <span class="panel-title-left">TERMINAL LOG FEED</span>
+                <span style="font-family:var(--font-mono);font-size:10px;color:var(--green);animation:dotBlink 1s step-end infinite;">● REC</span>
+            </div>
+            <div class="log-terminal" id="log-lines"></div>
+        </div>
+    </div>
+
+    <!-- BOTTOM ROW -->
+    <div class="bottom-row">
+
+        <!-- Attack Chart -->
+        <div class="panel">
+            <div class="panel-corner tl"></div><div class="panel-corner tr"></div>
+            <div class="panel-corner bl"></div><div class="panel-corner br"></div>
+            <div class="panel-title"><span class="panel-title-left">ATTACK FREQUENCY — 24H</span></div>
+            <div class="chart-bars" id="chart-bars"></div>
+            <div class="chart-labels">
+                <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>NOW</span>
+            </div>
+        </div>
+
+        <!-- Active Defense -->
+        <div class="panel">
+            <div class="panel-corner tl"></div><div class="panel-corner tr"></div>
+            <div class="panel-corner bl"></div><div class="panel-corner br"></div>
+            <div class="panel-title"><span class="panel-title-left">ACTIVE DEFENSE</span></div>
+
+            <!-- Email Alerts -->
+            <div class="email-status-box">
+                <div class="email-lamp"></div>
+                <div class="email-label">
+                    EMAIL ALERTS<br>
+                    <span style="font-size:9px;color:var(--muted);">Auto-fires on CRITICAL threat</span>
+                </div>
+                <div class="email-sent-count" id="email-count">0</div>
+            </div>
+
+            <!-- Honeypot -->
+            <div class="honeypot-box">
+                <div class="hp-lamp"></div>
+                <div class="hp-label">
+                    HONEYPOT TRAP<br>
+                    <span style="font-size:9px;color:var(--muted);">/honeypot (fake-admin)</span>
+                </div>
+                <div class="hp-count" id="hp-count">0</div>
+            </div>
+
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:6px;">BANNED IP LIST</div>
+            <div id="banned-list" style="max-height:100px;overflow-y:auto;">
+                <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">No bans yet.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STRESS TEST -->
+    <button class="stress-btn" id="stress-btn" onclick="stressTest()">
+        ⚡ &nbsp; RUN STRESS TEST — SIMULATE COORDINATED ATTACK + EMAIL ALERT
+    </button>
+
+</div>
+
+<script>
+/* ══ CURSOR ══ */
+const cursorDot   = document.getElementById('cursor-dot');
+const cursorRing  = document.getElementById('cursor-ring');
+const cursorCross = document.getElementById('cursor-crosshair');
+let mx=0,my=0,rx=0,ry=0;
+
+document.addEventListener('mousemove', e => {
+    mx=e.clientX; my=e.clientY;
+    cursorDot.style.left   = mx+'px'; cursorDot.style.top   = my+'px';
+    cursorCross.style.left = mx+'px'; cursorCross.style.top = my+'px';
+});
+(function animRing(){
+    rx+=(mx-rx)*0.14; ry+=(my-ry)*0.14;
+    cursorRing.style.left=rx+'px'; cursorRing.style.top=ry+'px';
+    requestAnimationFrame(animRing);
+})();
+document.addEventListener('mousedown', ()=>document.body.classList.add('cursor-click'));
+document.addEventListener('mouseup',   ()=>document.body.classList.remove('cursor-click'));
+document.addEventListener('mouseover', e=>{
+    if(e.target.closest('button,.threat-item,.btn-block,.btn-unblock'))
+        document.body.classList.add('cursor-hover');
+    else document.body.classList.remove('cursor-hover');
+});
+
+/* ══ MATRIX RAIN ══ */
+const canvas=document.getElementById('bg-canvas');
+const ctx=canvas.getContext('2d');
+const CHARS='01アイウエオカキクケコABCDEF<>{}[];:';
+let cols,drops;
+function resizeCanvas(){
+    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+    cols=Math.floor(canvas.width/16);
+    drops=Array(cols).fill(0).map(()=>Math.random()*-80);
+}
+resizeCanvas(); window.addEventListener('resize',resizeCanvas);
+setInterval(()=>{
+    ctx.fillStyle='rgba(2,4,8,0.04)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.font="11px 'Share Tech Mono',monospace";
+    drops.forEach((y,i)=>{
+        const char=CHARS[Math.floor(Math.random()*CHARS.length)];
+        ctx.fillStyle=`rgba(0,229,255,${y*16>canvas.height*0.7?0.08:0.35})`;
+        ctx.fillText(char,i*16,y*16);
+        if(y*16>canvas.height&&Math.random()>0.975) drops[i]=0;
+        drops[i]+=0.35;
+    });
+},50);
+
+/* ══ CLOCK ══ */
+setInterval(()=>{ document.getElementById('clock').innerText=new Date().toLocaleTimeString(); },1000);
+document.getElementById('clock').innerText=new Date().toLocaleTimeString();
+
+/* ══ CHART BARS ══ */
+const chartEl=document.getElementById('chart-bars');
+Array(24).fill(0).map(()=>({val:Math.floor(Math.random()*85+5),danger:Math.random()>0.8})).forEach(b=>{
+    const bar=document.createElement('div');
+    bar.className='chart-bar'+(b.danger?' danger-bar':'');
+    bar.style.height=b.val+'%';
+    bar.title=b.val+' events';
+    chartEl.appendChild(bar);
+});
+
+/* ══ LOG ══ */
+function appendLog(msg,cls=''){
+    const container=document.getElementById('log-lines');
+    const line=document.createElement('div');
+    line.className=`log-line ${cls}`;
+    const ts=new Date().toLocaleTimeString('en-US',{hour12:false});
+    line.innerText=`[${ts}] ${msg}`;
+    container.prepend(line);
+    while(container.children.length>120) container.removeChild(container.lastChild);
+}
+
+/* Organic log noise */
+const NOISE=[
+    ['[HEARTBEAT] All sensors nominal',''],
+    ['[AUTH] Login success: devops@corp.local',''],
+    ['[SCAN] Shodan crawler detected','warn'],
+    ['[TLS] Certificate validation passed','info'],
+    ['[WAF] XSS attempt blocked','block'],
+    ['[GEO] New connection: SG → /api/v2/data',''],
+    ['[AUTH] MFA challenge issued: user=cto','info'],
+    ['[RATE] Throttled: 78.46.x.x (60 req/min)','warn'],
+    ['[IDS] Port sweep from 203.0.113.99','warn'],
+    ['[WAF] SQLi blocked: UNION SELECT payload','block'],
+];
+let noiseIdx=0;
+setInterval(()=>{ const m=NOISE[noiseIdx++%NOISE.length]; appendLog(m[0],m[1]); },4500);
+
+/* ══ TOAST ══ */
+let emailCount=0;
+function showToast(ip, type){
+    emailCount++;
+    document.getElementById('email-count').innerText=emailCount;
+    const toast=document.getElementById('toast');
+    document.getElementById('toast-body').innerText=
+        `CRITICAL ${type} from ${ip}\nSecurity team email dispatched automatically.`;
+    toast.style.display='block';
+    appendLog(`[EMAIL] Alert dispatched → security team (${type} · ${ip})`, 'email');
+    setTimeout(()=>{ toast.style.display='none'; },5000);
+}
+
+/* ══ DASHBOARD ══ */
+let lastFailCount=0;
+let knownCriticals=new Set();
+
+async function updateDashboard(){
+    try {
+        const res=await fetch('/stats');
+        const data=await res.json();
+
+        setVal('stat-success', data.total_success);
+        setVal('stat-fails',   data.total_fails);
+        setVal('stat-banned',  data.banned_count);
+        setVal('stat-score',   data.health_score);
+
+        const total=(data.total_success+data.total_fails)||1;
+        document.getElementById('bar-success').style.width=(data.total_success/total*100)+'%';
+        document.getElementById('bar-fails').style.width=Math.min(data.total_fails/50*100,100)+'%';
+        document.getElementById('bar-banned').style.width=Math.min(data.banned_count/20*100,100)+'%';
+        document.getElementById('bar-score').style.width=data.health_score+'%';
+        document.getElementById('hp-count').innerText=data.honeypot_hits||0;
+
+        if(data.total_fails>lastFailCount){
+            const diff=data.total_fails-lastFailCount;
+            appendLog(`[ALERT] ${diff} new threat event(s) detected`,'danger');
+            lastFailCount=data.total_fails;
+        }
+
+        /* Threat list */
+        const list=document.getElementById('threat-list');
+        const ips=Object.entries(data.suspicious_ips||{});
+        document.getElementById('threat-count').innerText=ips.length+' ACTIVE';
+
+        if(ips.length===0){
+            list.innerHTML=`<div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:center;padding:2rem;">NO ACTIVE THREATS</div>`;
+            document.body.classList.remove('cursor-danger');
+        } else {
+            document.body.classList.add('cursor-danger');
+            list.innerHTML='';
+            ips.forEach(([ip,info])=>{
+                const isCrit=info.threat==='CRITICAL';
+                const isBanned=data.blacklist&&data.blacklist.includes(ip);
+
+                /* Show toast for new critical IPs */
+                if(isCrit && !knownCriticals.has(ip)){
+                    knownCriticals.add(ip);
+                    showToast(ip, info.type);
+                }
+
+                list.innerHTML+=`
+                    <div class="threat-item ${isCrit?'critical':''}">
+                        <div>
+                            <div class="threat-ip">${ip}</div>
+                            <div class="threat-type">${info.type} · ${info.attempts} attempts · ${info.first_seen||''}</div>
+                        </div>
+                        <div class="threat-actions">
+                            <span class="badge ${info.threat}">${info.threat}</span>
+                            ${isBanned
+                                ? `<span class="badge BANNED">BANNED</span><button class="btn-unblock" onclick="unblockIP('${ip}')">UNBAN</button>`
+                                : `<button class="btn-block" onclick="blockIP('${ip}')">BLOCK</button>`
+                            }
+                        </div>
+                    </div>`;
+            });
+        }
+
+        /* Banned list */
+        const bannedEl=document.getElementById('banned-list');
+        if(data.blacklist&&data.blacklist.length>0){
+            bannedEl.innerHTML=data.blacklist.map(ip=>`
+                <div class="banned-row">
+                    <span class="banned-x">✕</span>
+                    <span class="banned-ip">${ip}</span>
+                    <span class="banned-tag">BLOCKED</span>
+                </div>`).join('');
+        } else {
+            bannedEl.innerHTML=`<div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">No bans yet.</div>`;
+        }
+
+    } catch(e){
+        appendLog('[SYS] Backend offline — demo mode active','warn');
+        seedDemoMode();
+    }
+}
+
+function setVal(id,val){
+    const el=document.getElementById(id);
+    if(el&&el.innerText!==String(val)){
+        el.style.transform='scale(1.25)';
+        el.innerText=val;
+        setTimeout(()=>el.style.transform='',200);
+    }
+}
+
+/* ══ DEMO MODE ══ */
+function seedDemoMode(){
+    document.getElementById('stat-success').innerText=1247;
+    document.getElementById('stat-fails').innerText=38;
+    document.getElementById('stat-banned').innerText=9;
+    document.getElementById('stat-score').innerText=62;
+    document.getElementById('bar-success').style.width='97%';
+    document.getElementById('bar-fails').style.width='76%';
+    document.getElementById('bar-banned').style.width='45%';
+    document.getElementById('bar-score').style.width='62%';
+    document.getElementById('hp-count').innerText=3;
+    document.body.classList.add('cursor-danger');
+
+    const demoIPs={
+        '103.14.72.201':  {type:'SQL Injection',       threat:'CRITICAL',attempts:14,first_seen:'10:02:01'},
+        '45.33.32.156':   {type:'Directory Traversal', threat:'HIGH',    attempts:6, first_seen:'10:04:18'},
+        '192.241.209.91': {type:'Brute Force',         threat:'HIGH',    attempts:5, first_seen:'10:05:44'},
+        '185.220.101.12': {type:'XSS Attack',          threat:'MEDIUM',  attempts:3, first_seen:'10:06:10'},
+    };
+    const list=document.getElementById('threat-list');
+    list.innerHTML='';
+    Object.entries(demoIPs).forEach(([ip,info])=>{
+        if(info.threat==='CRITICAL'&&!knownCriticals.has(ip)){
+            knownCriticals.add(ip); showToast(ip,info.type);
+        }
+        list.innerHTML+=`
+            <div class="threat-item ${info.threat==='CRITICAL'?'critical':''}">
+                <div>
+                    <div class="threat-ip">${ip}</div>
+                    <div class="threat-type">${info.type} · ${info.attempts} attempts · ${info.first_seen}</div>
+                </div>
+                <div class="threat-actions">
+                    <span class="badge ${info.threat}">${info.threat}</span>
+                    <button class="btn-block" onclick="blockIP('${ip}')">BLOCK</button>
+                </div>
+            </div>`;
+    });
+    document.getElementById('threat-count').innerText='4 ACTIVE';
+
+    const bannedEl=document.getElementById('banned-list');
+    bannedEl.innerHTML='';
+    ['103.14.72.201','45.33.32.156'].forEach(ip=>{
+        bannedEl.innerHTML+=`<div class="banned-row"><span class="banned-x">✕</span><span class="banned-ip">${ip}</span><span class="banned-tag">BLOCKED</span></div>`;
+    });
+
+    [
+        ['[INIT] Sentinel-X v3.0.0 started','info'],
+        ['[AUTH] Login success: admin@corp.local',''],
+        ['[ALERT] SQL injection: 103.14.72.201','danger'],
+        ['[FIREWALL] Rate limit: 45.33.32.156','warn'],
+        ['[ALERT] Dir traversal: 192.241.209.91','danger'],
+        ['[BLOCK] AUTO-BAN: 103.14.72.201','block'],
+        ['[EMAIL] Alert sent → security@company.com','email'],
+        ['[SYS] Threat signatures: 14,372 rules loaded','info'],
+    ].forEach((l,i)=>setTimeout(()=>appendLog(l[0],l[1]),i*220));
+}
+
+/* ══ ACTIONS ══ */
+async function blockIP(ip){
+    try {
+        await fetch('/block-ip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip})});
+        appendLog(`[FIREWALL] MANUAL BLOCK: ${ip}`,'block');
+        updateDashboard();
+    } catch(e){ appendLog(`[DEMO] Block simulated: ${ip}`,'block'); }
+}
+
+async function unblockIP(ip){
+    try {
+        await fetch('/unblock-ip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip})});
+        appendLog(`[FIREWALL] UNBAN: ${ip}`,'info');
+        knownCriticals.delete(ip);
+        updateDashboard();
+    } catch(e){ appendLog(`[DEMO] Unban simulated: ${ip}`,'info'); }
+}
+
+async function stressTest(){
+    const btn=document.getElementById('stress-btn');
+    btn.innerText='🚨   ATTACK SIMULATION IN PROGRESS...';
+    btn.classList.add('running');
+    document.body.classList.add('cursor-danger');
+
+    const fakeIP=`${Math.floor(Math.random()*200+10)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
+    const payload=`${new Date().toISOString()} LOGIN_FAIL user=admin ip=${fakeIP}.' OR 1=1--`;
+
+    appendLog(`[SIM] Simulating coordinated attack from ${fakeIP}`,'warn');
+
+    try {
+        await fetch('/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({line:payload})});
+    } catch(e){}
+
+    const events=[
+        [`[ATTACK] SQL injection payload: ${fakeIP}`,'danger'],
+        [`[ALERT] Credential stuffing — 42 attempts/sec`,'danger'],
+        [`[FIREWALL] Auto-ban triggered → ${fakeIP}`,'block'],
+        [`[EMAIL] CRITICAL alert dispatched → security team`,'email'],
+        [`[ANALYSIS] Vector: OWASP A03:2021 Injection`,'warn'],
+        [`[STATUS] System integrity maintained`,'info'],
+    ];
+    events.forEach(([m,c],i)=>setTimeout(()=>appendLog(m,c),i*350));
+    setTimeout(()=>showToast(fakeIP,'SQL Injection'),700);
+
+    setTimeout(()=>{
+        btn.innerText='⚡   RUN STRESS TEST — SIMULATE COORDINATED ATTACK + EMAIL ALERT';
+        btn.classList.remove('running');
+        updateDashboard();
+    },2500);
+}
+
+/* ══ INIT ══ */
+setInterval(updateDashboard,3000);
+updateDashboard();
+</script>
+</body>
+</html>
