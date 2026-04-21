@@ -15,13 +15,15 @@ app = Flask(__name__)
 BLACKLIST_FILE = "blacklist.json"
 LOG_FILE       = "logs.txt"
 
-# Email config from .env
 SENDER_EMAIL    = os.getenv("SENDER_EMAIL", "")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD", "")
 ALERT_EMAIL     = os.getenv("ALERT_EMAIL", "")
 
-# Track which IPs we already emailed about (resets on restart — fine for demo)
 alerted_ips = set()
+
+# ── NEW: In-memory stores for dashboard ──────────────────────────────────────
+email_history = []   # list of dicts
+attack_logs   = []   # list of dicts
 
 # ── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -90,8 +92,8 @@ def send_alert_email(ip, attack_type, attempts, threat_level):
     """
 
     try:
-        import urllib.request, json
-        body = json.dumps({
+        import urllib.request, json as json2
+        body = json2.dumps({
             "personalizations": [{"to": [{"email": recipient}]}],
             "from": {"email": sender, "name": "Sentinel-X Security"},
             "subject": subject,
@@ -104,8 +106,27 @@ def send_alert_email(ip, attack_type, attempts, threat_level):
         )
         urllib.request.urlopen(req)
         print(f"[EMAIL] Alert sent → {recipient}")
+
+        # ── NEW: Save to email history ─────────────────────────────────────
+        email_history.append({
+            "time":        datetime.now().strftime("%d-%b-%Y %I:%M:%S %p"),
+            "to":          recipient,
+            "attack_type": attack_type,
+            "ip":          ip,
+            "threat":      threat_level,
+            "status":      "Sent"
+        })
+
     except Exception as e:
         print(f"[EMAIL] Failed: {e}")
+        email_history.append({
+            "time":        datetime.now().strftime("%d-%b-%Y %I:%M:%S %p"),
+            "to":          recipient,
+            "attack_type": attack_type,
+            "ip":          ip,
+            "threat":      threat_level,
+            "status":      f"Failed: {e}"
+        })
 
 # ── ATTACK SIGNATURES ─────────────────────────────────────────────────────────
 
@@ -166,7 +187,6 @@ def stats():
 
                 fail_count += 1
 
-                # Extract IP
                 ip = None
                 m = re.search(r"ip=([0-9]{1,3}(?:\.[0-9]{1,3}){3})", line)
                 if m:
@@ -193,10 +213,19 @@ def stats():
                 for attack_name in SEVERITY_ORDER:
                     if re.search(ATTACK_PATTERNS[attack_name], line, re.IGNORECASE):
                         ip_data[ip]["type"] = attack_name
+
+                        # ── NEW: Log every attack ──────────────────────────
+                        attack_logs.append({
+                            "time":        datetime.now().strftime("%d-%b-%Y %I:%M:%S %p"),
+                            "ip":          ip,
+                            "attack_type": attack_name,
+                            "threat":      ip_data[ip]["threat"],
+                            "attempts":    ip_data[ip]["attempts"]
+                        })
+
                         if attack_name in CRITICAL_ATTACKS:
                             ip_data[ip]["threat"] = "CRITICAL"
                             save_to_blacklist(ip)
-                            # 🔔 Send email alert for critical threats
                             send_alert_email(
                                 ip, attack_name,
                                 ip_data[ip]["attempts"], "CRITICAL"
@@ -216,6 +245,20 @@ def stats():
         "health_score":   max(0, 100 - (fail_count * 2)),
     })
 
+
+# ── NEW ROUTES ────────────────────────────────────────────────────────────────
+
+@app.route("/email-history")
+def get_email_history():
+    return jsonify({"email_history": list(reversed(email_history))})
+
+
+@app.route("/attack-logs")
+def get_attack_logs():
+    return jsonify({"attack_logs": list(reversed(attack_logs[-100:]))})
+
+
+# ── EXISTING ROUTES ───────────────────────────────────────────────────────────
 
 @app.route("/block-ip", methods=["POST"])
 def block_ip():
@@ -269,11 +312,8 @@ def get_blacklist():
 
 @app.route("/test-email")
 def test_email():
-    """Route to test email setup — visit /test-email in browser."""
     send_alert_email("1.2.3.4", "SQL Injection", 14, "CRITICAL")
     return jsonify({"status": "Email sent! Check your inbox.", "to": ALERT_EMAIL})
-
-
 
 
 # ── STARTUP ───────────────────────────────────────────────────────────────────
