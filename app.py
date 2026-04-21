@@ -50,95 +50,62 @@ def get_threat_level(count):
 # ── EMAIL ALERT ───────────────────────────────────────────────────────────────
 
 def send_alert_email(ip, attack_type, attempts, threat_level):
-    """Send a professional HTML alert email to the security team."""
-    if not SENDER_EMAIL or not SENDER_PASSWORD or not ALERT_EMAIL:
-        print("[EMAIL] Skipped — email credentials not set in .env")
+    api_key = os.environ.get("SENDGRID_API_KEY")
+    sender = os.environ.get("SENDER_EMAIL")
+    recipient = os.environ.get("ALERT_EMAIL")
+    if not api_key or not sender or not recipient:
+        print("[EMAIL] Skipped — SendGrid credentials not set")
         return
     if ip in alerted_ips:
-        return   # Don't spam for same IP
+        return
     alerted_ips.add(ip)
 
     now = datetime.now().strftime("%d-%b-%Y at %I:%M:%S %p")
-
     subject = f"🔴 CRITICAL THREAT DETECTED — {attack_type} | Sentinel-X"
 
     html_body = f"""
     <div style="font-family: 'Courier New', monospace; background: #020408; color: #cdd6f4;
-                max-width: 600px; margin: 0 auto; border: 1px solid #00e5ff33; border-radius: 4px; overflow: hidden;">
-
-      <!-- Header -->
+                max-width: 600px; margin: 0 auto; border: 1px solid #00e5ff33; border-radius: 4px;">
       <div style="background: #060c14; padding: 24px 32px; border-bottom: 1px solid #00e5ff22;">
         <div style="color: #00e5ff; font-size: 20px; font-weight: bold; letter-spacing: 6px;">SENTINEL-X</div>
         <div style="color: #3a4a60; font-size: 11px; letter-spacing: 2px; margin-top: 4px;">E-COMMERCE THREAT MONITORING SYSTEM</div>
       </div>
-
-      <!-- Alert badge -->
-      <div style="background: #ff2d5511; border-bottom: 1px solid #ff2d5522; padding: 12px 32px;
-                  color: #ff2d55; font-size: 12px; letter-spacing: 3px;">
+      <div style="background: #ff2d5511; border-bottom: 1px solid #ff2d5522; padding: 12px 32px; color: #ff2d55; font-size: 12px; letter-spacing: 3px;">
         ⚠ AUTOMATED SECURITY ALERT — IMMEDIATE ATTENTION REQUIRED
       </div>
-
-      <!-- Body -->
       <div style="padding: 32px;">
         <table style="width:100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px; width: 140px;">THREAT LEVEL</td>
-            <td style="padding: 10px 0; color: #ff2d55; font-weight: bold; font-size: 16px; letter-spacing: 3px;">● {threat_level}</td>
-          </tr>
-          <tr style="border-top: 1px solid #0a1520;">
-            <td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">ATTACK TYPE</td>
-            <td style="padding: 10px 0; color: #cdd6f4; font-size: 14px;">{attack_type}</td>
-          </tr>
-          <tr style="border-top: 1px solid #0a1520;">
-            <td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">IP ADDRESS</td>
-            <td style="padding: 10px 0; color: #00e5ff; font-size: 14px;">{ip}</td>
-          </tr>
-          <tr style="border-top: 1px solid #0a1520;">
-            <td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">ATTEMPTS</td>
-            <td style="padding: 10px 0; color: #ff9f1c; font-size: 14px;">{attempts} attempts detected</td>
-          </tr>
-          <tr style="border-top: 1px solid #0a1520;">
-            <td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">DETECTED AT</td>
-            <td style="padding: 10px 0; color: #cdd6f4; font-size: 13px;">{now}</td>
-          </tr>
-          <tr style="border-top: 1px solid #0a1520;">
-            <td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">ACTION TAKEN</td>
-            <td style="padding: 10px 0; color: #00ff88; font-size: 13px;">✅ IP Auto-Banned from blacklist</td>
-          </tr>
+          <tr><td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px; width: 140px;">THREAT LEVEL</td><td style="padding: 10px 0; color: #ff2d55; font-weight: bold; font-size: 16px;">● {threat_level}</td></tr>
+          <tr style="border-top: 1px solid #0a1520;"><td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">ATTACK TYPE</td><td style="padding: 10px 0; color: #cdd6f4;">{attack_type}</td></tr>
+          <tr style="border-top: 1px solid #0a1520;"><td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">IP ADDRESS</td><td style="padding: 10px 0; color: #00e5ff;">{ip}</td></tr>
+          <tr style="border-top: 1px solid #0a1520;"><td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">ATTEMPTS</td><td style="padding: 10px 0; color: #ff9f1c;">{attempts} attempts detected</td></tr>
+          <tr style="border-top: 1px solid #0a1520;"><td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">DETECTED AT</td><td style="padding: 10px 0; color: #cdd6f4;">{now}</td></tr>
+          <tr style="border-top: 1px solid #0a1520;"><td style="padding: 10px 0; color: #3a4a60; font-size: 11px; letter-spacing: 2px;">ACTION TAKEN</td><td style="padding: 10px 0; color: #00ff88;">✅ IP Auto-Banned from blacklist</td></tr>
         </table>
-
-        <div style="margin-top: 32px; padding: 16px; background: #0a1520; border-left: 2px solid #00e5ff; border-radius: 2px;">
-          <div style="color: #3a4a60; font-size: 10px; letter-spacing: 2px; margin-bottom: 8px;">RECOMMENDED ACTIONS</div>
-          <div style="color: #cdd6f4; font-size: 12px; line-height: 1.8;">
-            1. Review the full dashboard for related activity<br>
-            2. Check if IP belongs to a known threat actor<br>
-            3. Consider blocking the entire IP range if pattern continues<br>
-            4. Notify the platform security team if attack escalates
-          </div>
-        </div>
       </div>
-
-      <!-- Footer -->
-      <div style="background: #060c14; padding: 16px 32px; border-top: 1px solid #0a1520;
-                  color: #3a4a60; font-size: 10px; letter-spacing: 1px;">
+      <div style="background: #060c14; padding: 16px 32px; border-top: 1px solid #0a1520; color: #3a4a60; font-size: 10px;">
         This is an automated alert from Sentinel-X Security Monitoring. Do not reply to this email.
       </div>
     </div>
     """
 
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = f"Sentinel-X Security <{SENDER_EMAIL}>"
-        msg["To"]      = ALERT_EMAIL
-        msg.attach(MIMEText(html_body, "html"))
-
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.sendmail(SENDER_EMAIL, ALERT_EMAIL, msg.as_string())
-        print(f"[EMAIL] Alert sent for {ip} → {ALERT_EMAIL}")
+        import urllib.request, json
+        body = json.dumps({
+            "personalizations": [{"to": [{"email": recipient}]}],
+            "from": {"email": sender, "name": "Sentinel-X Security"},
+            "subject": subject,
+            "content": [{"type": "text/html", "value": html_body}]
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.sendgrid.com/v3/mail/send",
+            data=body,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req)
+        print(f"[EMAIL] Alert sent → {recipient}")
     except Exception as e:
-        print(f"[EMAIL] Failed to send: {e}")
+        print(f"[EMAIL] Failed: {e}")
 
 # ── ATTACK SIGNATURES ─────────────────────────────────────────────────────────
 
