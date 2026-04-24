@@ -52,6 +52,8 @@ THREAT_PATTERNS = {
 }
 
 request_counts = {}
+success_count = 0
+fail_count = 0
 
 def detect_threats(ip, path, payload):
     threats = []
@@ -105,12 +107,15 @@ def index():
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
+    global success_count, fail_count
+
     data = request.get_json()
     ip = data.get("ip", "unknown")
     path = data.get("path", "/")
     payload = data.get("payload", "")
 
     if ip in blacklisted_ips:
+        fail_count += 1
         return jsonify({"status": "blocked", "ip": ip, "reason": "Blacklisted IP"})
 
     threats = detect_threats(ip, path, payload)
@@ -129,9 +134,13 @@ def analyze():
     elif count >= 5:
         severity = "MEDIUM"
 
-    if threats and ip not in alerted_ips:
-        alerted_ips.add(ip)
-        send_alert_email(ip, threats[0], count, severity)
+    if threats:
+        fail_count += 1
+        if ip not in alerted_ips:
+            alerted_ips.add(ip)
+            send_alert_email(ip, threats[0], count, severity)
+    else:
+        success_count += 1
 
     return jsonify({
         "status": "analyzed",
@@ -160,7 +169,21 @@ def get_blacklist():
 
 @app.route("/stats", methods=["GET"])
 def stats():
+    total = success_count + fail_count
+    health = round((success_count / total) * 100) if total > 0 else 100
+
+    suspicious = [
+        {"ip": ip, "count": request_counts.get(ip, 0)}
+        for ip in alerted_ips
+    ]
+
     return jsonify({
+        "total_success": success_count,
+        "total_fails": fail_count,
+        "banned_count": len(blacklisted_ips),
+        "health_score": health,
+        "suspicious_ips": suspicious,
+        # kept for backward compatibility
         "total_ips_tracked": len(request_counts),
         "alerted_ips": list(alerted_ips),
         "blacklisted_ips": blacklisted_ips,
