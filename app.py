@@ -94,7 +94,7 @@ def send_alert_email(ip, attack_type, attempts, threat_level):
     try:
         import urllib.request, json as json2
         body = json2.dumps({
-            "personalizations": [{"to": [{"email": recipient}]}],
+            "personalizations""to": [{"email": e.strip()} for e in recipient.split(",")]
             "from": {"email": sender, "name": "Sentinel-X Security"},
             "subject": subject,
             "content": [{"type": "text/html", "value": html_body}]
