@@ -93,8 +93,9 @@ def send_alert_email(ip, attack_type, attempts, threat_level):
 
     try:
         import urllib.request, json as json2
+        recipients = [{"email": e.strip()} for e in recipient.split(",")]
         body = json2.dumps({
-            "personalizations""to": [{"email": e.strip()} for e in recipient.split(",")]
+            "personalizations": [{"to": recipients}],
             "from": {"email": sender, "name": "Sentinel-X Security"},
             "subject": subject,
             "content": [{"type": "text/html", "value": html_body}]
@@ -107,7 +108,7 @@ def send_alert_email(ip, attack_type, attempts, threat_level):
         urllib.request.urlopen(req)
         print(f"[EMAIL] Alert sent → {recipient}")
 
-        # ── NEW: Save to email history ─────────────────────────────────────
+        # ── Save to email history ─────────────────────────────────────
         email_history.append({
             "time":        datetime.now().strftime("%d-%b-%Y %I:%M:%S %p"),
             "to":          recipient,
@@ -214,7 +215,6 @@ def stats():
                     if re.search(ATTACK_PATTERNS[attack_name], line, re.IGNORECASE):
                         ip_data[ip]["type"] = attack_name
 
-                        # ── NEW: Log every attack ──────────────────────────
                         attack_logs.append({
                             "time":        datetime.now().strftime("%d-%b-%Y %I:%M:%S %p"),
                             "ip":          ip,
