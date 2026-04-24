@@ -12,8 +12,8 @@ load_dotenv()
 
 app = Flask(__name__)
 
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "alert@sentinel-x.com")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "")
+SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD", "")
 ALERT_EMAIL = os.environ.get("ALERT_EMAIL", "")
 
 alerted_ips = set()
@@ -56,62 +56,46 @@ request_counts = {}
 def detect_threats(ip, path, payload):
     threats = []
     full_text = f"{path} {payload}"
-
     for threat_name, patterns in THREAT_PATTERNS.items():
         for pattern in patterns:
             if re.search(pattern, full_text):
                 threats.append(threat_name)
                 break
-
     return threats
 
 def send_alert_email(ip, threat_type, count, severity):
-    if not SENDGRID_API_KEY or not ALERT_EMAIL:
-        print("[EMAIL] Skipped — missing API key or recipient email")
+    if not SENDER_EMAIL or not SENDER_PASSWORD or not ALERT_EMAIL:
+        print("[EMAIL] Skipped — missing SENDER_EMAIL, SENDER_PASSWORD, or ALERT_EMAIL")
         return
 
-    recipient = ALERT_EMAIL
-    recipients = [{"email": e.strip()} for e in recipient.split(",")]
+    recipients = [e.strip() for e in ALERT_EMAIL.split(",")]
 
-    subject = f"🚨 Sentinel-X Alert: {threat_type} from {ip}"
+    subject = f"Sentinel-X Alert: {threat_type} from {ip}"
     body = f"""
-    <h2>⚠️ Security Alert from Sentinel-X</h2>
+    <h2>Security Alert from Sentinel-X</h2>
     <p><b>Threat Type:</b> {threat_type}</p>
     <p><b>Source IP:</b> {ip}</p>
     <p><b>Severity:</b> {severity}</p>
     <p><b>Request Count:</b> {count}</p>
-    <p><b>Time:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
+    <p><b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC</p>
     <br>
     <p>Login to your Sentinel-X dashboard for more details.</p>
     """
 
-    import urllib.request
-    import urllib.error
-
-    data = json.dumps({
-        "personalizations": [{"to": recipients}],
-        "from": {"email": SENDER_EMAIL},
-        "subject": subject,
-        "content": [{"type": "text/html", "value": body}]
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        "https://api.sendgrid.com/v3/mail/send",
-        data=data,
-        headers={
-            "Authorization": f"Bearer {SENDGRID_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        method="POST"
-    )
-
     try:
-        urllib.request.urlopen(req)
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = ", ".join(recipients)
+        msg.attach(MIMEText(body, "html"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.sendmail(SENDER_EMAIL, recipients, msg.as_string())
+
         print(f"[EMAIL] Alert sent to: {ALERT_EMAIL}")
-    except urllib.error.HTTPError as e:
-        print(f"[EMAIL] Failed: {e.code} {e.read().decode()}")
     except Exception as e:
-        print(f"[EMAIL] Error: {e}")
+        print(f"[EMAIL] Failed: {e}")
 
 
 @app.route("/")
@@ -186,7 +170,7 @@ def stats():
 
 @app.route("/test-email")
 def test_email():
-    alerted_ips.clear()  # ✅ FIX: clears so test always fires
+    alerted_ips.clear()
     send_alert_email("1.2.3.4", "SQL Injection", 14, "CRITICAL")
     return jsonify({"status": "Email sent! Check your inbox.", "to": ALERT_EMAIL})
 
